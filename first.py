@@ -35,7 +35,7 @@ def add_criminals():
           {"name": "Merrian ", "age": 20, "crime": "froud", "image_path": "C:\\Users\\user\\Documents\\Downloads\\criminal3data.jpg"},
           {"name": "Asfak", "age": 40, "crime": "murder", "image_path": "C:\\Users\\user\\Documents\\Downloads\\criminal4data.jpg"},
           {"name": "samina", "age": 37, "crime": "half murder", "image_path": "C:\\Users\\user\\Documents\\Downloads\\criminal1data.jpeg"},
-        
+    
         # Add more criminals and their images here
     ]
     
