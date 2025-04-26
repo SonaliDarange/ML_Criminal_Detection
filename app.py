@@ -3,29 +3,31 @@ import numpy as np
 import pickle
 import cv2
 from deepface import DeepFace
-from flask import Flask, request, render_template, Response, redirect, url_for
+from flask import Flask, request, render_template, Response
 from threading import Lock
+from waitress import serve  # Import waitress
 
+# Flask app initialization
 app = Flask(__name__, template_folder="C:\\ML\\templates", static_folder="C:\\ML\\static")
 
+# Constants
 UPLOAD_FOLDER = "C:\\ML\\static\\uploads"
+DATABASE_FILE = "criminal_db.pkl"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-DATABASE_FILE = "criminal_db.pkl"
-
-
+# Global variables
 last_match_info = {"matched": False, "details": None}
 lock = Lock()
 
-
+# Functions
 def load_database():
     try:
         with open(DATABASE_FILE, "rb") as f:
             database = pickle.load(f)
-            print("[INFO] Criminal database loaded.")
-            return database
+        print("[INFO] Criminal database loaded successfully.")
+        return database
     except FileNotFoundError:
-        print("[WARNING] Database file not found.")
+        print("[WARNING] No criminal database found. Starting fresh.")
         return {}
 
 def get_face_embedding(image_path):
@@ -33,12 +35,9 @@ def get_face_embedding(image_path):
         embeddings = DeepFace.represent(img_path=image_path, model_name="Facenet", enforce_detection=False)
         if embeddings:
             return np.array(embeddings[0]["embedding"])
-        else:
-            return None
     except Exception as e:
-        print(f"[ERROR] Embedding failed: {e}")
-        return None
-
+        print(f"[ERROR] Face embedding failed: {e}")
+    return None
 
 def identify_criminal(image_path):
     database = load_database()
@@ -53,12 +52,13 @@ def identify_criminal(image_path):
             continue
 
         distance = np.linalg.norm(np.array(db_embedding) - query_embedding)
-        if distance < 10:
-            print(f"[MATCH] {name} | Distance: {distance}")
+        if distance < 10:  # Threshold for matching
+            print(f"[MATCH FOUND] {name} | Distance: {distance:.2f}")
             return f"Match found: {name}", details
 
     return "No match found", None
 
+# Routes
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -66,14 +66,18 @@ def index():
 @app.route('/upload', methods=['POST'])
 def upload_image():
     if 'file' not in request.files:
-        return "No file uploaded"
+        return "No file uploaded."
 
     file = request.files['file']
+    if file.filename == '':
+        return "No file selected."
+
     filename = file.filename
     path = os.path.join(UPLOAD_FOLDER, filename)
     file.save(path)
 
     result, criminal_info = identify_criminal(path)
+
     return render_template(
         'index.html',
         result=result,
@@ -91,6 +95,10 @@ def start_surveillance():
 def generate_frames():
     cap = cv2.VideoCapture(0)
     database = load_database()
+
+    if not cap.isOpened():
+        print("[ERROR] Cannot open camera.")
+        return
 
     while True:
         success, frame = cap.read()
@@ -113,6 +121,7 @@ def generate_frames():
                 if distance < 10:
                     text = f"{name} | {details.get('crime', '')} | {details.get('status', '')}"
                     cv2.putText(frame, text, (30, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+
                     with lock:
                         last_match_info["matched"] = True
                         last_match_info["details"] = details
@@ -123,7 +132,7 @@ def generate_frames():
         if not matched:
             cv2.putText(frame, "No match found", (30, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
 
-        _, buffer = cv2.imencode('.jpg', frame)
+        ret, buffer = cv2.imencode('.jpg', frame)
         frame_bytes = buffer.tobytes()
 
         yield (b'--frame\r\n'
@@ -151,5 +160,6 @@ def video_report():
                 result="No match found yet. Please wait..."
             )
 
+# Main
 if __name__ == "__main__":
-    app.run(debug=True)
+    serve(app, host='0.0.0.0', port=5000)  # Use Waitress to serve the app
