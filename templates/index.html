@@ -32,7 +32,7 @@
         <p><b>Case Number:</b> {{ criminal_info.case_number }}</p>
       {% endif %}
       {% if image_url %}
-        <img src="{{ image_url }}" alt="Uploaded Image" class="img-fluid mt-3 rounded shadow">
+        <img src="{{ image_url }}" alt="Uploaded Image" class="img-fluid mt-3 rounded shadow" style="max-width: 300px; height: auto;">
       {% endif %}
     </div>
   {% endif %}
