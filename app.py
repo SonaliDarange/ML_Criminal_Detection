@@ -5,21 +5,24 @@ import cv2
 from deepface import DeepFace
 from flask import Flask, request, render_template, Response
 from threading import Lock
-from waitress import serve  # Import waitress
+from waitress import serve  # Production WSGI server
+
+# Base directory setup
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+UPLOAD_FOLDER = os.path.join(STATIC_DIR, "uploads")
+DATABASE_FILE = os.path.join(BASE_DIR, "criminal_db.pkl")
 
 # Flask app initialization
-app = Flask(__name__, template_folder="C:\\ML\\templates", static_folder="C:\\ML\\static")
-
-# Constants
-UPLOAD_FOLDER = "C:\\ML\\static\\uploads"
-DATABASE_FILE = "criminal_db.pkl"
+app = Flask(__name__, template_folder=TEMPLATES_DIR, static_folder=STATIC_DIR)
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Global variables
 last_match_info = {"matched": False, "details": None}
 lock = Lock()
 
-# Functions
+# Load criminal database
 def load_database():
     try:
         with open(DATABASE_FILE, "rb") as f:
@@ -30,6 +33,7 @@ def load_database():
         print("[WARNING] No criminal database found. Starting fresh.")
         return {}
 
+# Extract face embedding
 def get_face_embedding(image_path):
     try:
         embeddings = DeepFace.represent(img_path=image_path, model_name="Facenet", enforce_detection=False)
@@ -39,6 +43,7 @@ def get_face_embedding(image_path):
         print(f"[ERROR] Face embedding failed: {e}")
     return None
 
+# Identify criminal from image
 def identify_criminal(image_path):
     database = load_database()
     query_embedding = get_face_embedding(image_path)
@@ -52,17 +57,18 @@ def identify_criminal(image_path):
             continue
 
         distance = np.linalg.norm(np.array(db_embedding) - query_embedding)
-        if distance < 10:  # Threshold for matching
+        if distance < 10:  # Threshold
             print(f"[MATCH FOUND] {name} | Distance: {distance:.2f}")
             return f"Match found: {name}", details
 
     return "No match found", None
 
-# Routes
+# Home page
 @app.route('/')
 def index():
     return render_template('index.html')
 
+# Upload image and identify
 @app.route('/upload', methods=['POST'])
 def upload_image():
     if 'file' not in request.files:
@@ -85,6 +91,7 @@ def upload_image():
         image_url=f"/static/uploads/{filename}"
     )
 
+# Surveillance start
 @app.route('/start_surveillance')
 def start_surveillance():
     with lock:
@@ -92,6 +99,7 @@ def start_surveillance():
         last_match_info["details"] = None
     return render_template('surveillance.html')
 
+# Generate camera frames
 def generate_frames():
     cap = cv2.VideoCapture(0)
     database = load_database()
@@ -140,10 +148,12 @@ def generate_frames():
 
     cap.release()
 
+# Video feed
 @app.route('/video_feed')
 def video_feed():
     return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
+# Video surveillance report
 @app.route('/video_report')
 def video_report():
     with lock:
@@ -160,6 +170,6 @@ def video_report():
                 result="No match found yet. Please wait..."
             )
 
-# Main
+# Production server startup
 if __name__ == "__main__":
-    serve(app, host='0.0.0.0', port=5000)  # Use Waitress to serve the app
+    serve(app, host="0.0.0.0", port=5000)
